@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visualizador 3D de Polígonos</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@300;400;600&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        :root {
+            --primary: #00ffff;
+            --secondary: #ff00ff;
+            --accent: #ffff00;
+            --dark: #0a0a0f;
+            --darker: #050508;
+            --glow: rgba(0, 255, 255, 0.5);
+        }
+        
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background: linear-gradient(135deg, var(--darker) 0%, var(--dark) 50%, #1a0a1f 100%);
+            color: var(--primary);
+            overflow: hidden;
+            height: 100vh;
+            position: relative;
+        }
+        
+        /* Fondo con patrón de grid */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(rgba(0, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+        
+        #container {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            z-index: 1;
+        }
+        
+        #canvas-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Panel de control */
+        #control-panel {
+            position: absolute;
+            top: 30px;
+            left: 30px;
+            background: rgba(10, 10, 15, 0.85);
+            backdrop-filter: blur(10px);
+            border: 2px solid var(--primary);
+            border-radius: 15px;
+            padding: 25px;
+            min-width: 280px;
+            box-shadow: 
+                0 0 30px var(--glow),
+                inset 0 0 20px rgba(0, 255, 255, 0.1);
+            z-index: 10;
+        }
+        
+        h1 {
+            font-family: 'Orbitron', monospace;
+            font-size: 24px;
+            font-weight: 900;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            text-shadow: 0 0 20px var(--glow);
+        }
+        
+        .control-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            color: var(--primary);
+            text-shadow: 0 0 10px var(--glow);
+        }
+        
+        select {
+            width: 100%;
+            padding: 12px 15px;
+            background: rgba(0, 0, 0, 0.6);
+            border: 2px solid var(--primary);
+            border-radius: 8px;
+            color: var(--primary);
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+        
+        select:hover {
+            background: rgba(0, 255, 255, 0.1);
+            box-shadow: 0 0 15px var(--glow);
+        }
+        
+        select:focus {
+            border-color: var(--secondary);
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+        }
+        
+        option {
+            background: var(--dark);
+            color: var(--primary);
+            padding: 10px;
+        }
+        
+        /* Stats */
+        #stats {
+            position: absolute;
+            top: 30px;
+            right: 30px;
+            background: rgba(10, 10, 15, 0.85);
+            backdrop-filter: blur(10px);
+            border: 2px solid rgba(255, 0, 255, 0.5);
+            border-radius: 12px;
+            padding: 20px;
+            min-width: 200px;
+            z-index: 10;
+        }
+        
+        #stats h3 {
+            font-family: 'Orbitron', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: var(--secondary);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+        
+        .stat-label {
+            color: rgba(255, 0, 255, 0.7);
+            font-weight: 600;
+        }
+        
+        .stat-value {
+            color: var(--secondary);
+            font-family: 'Orbitron', monospace;
+            font-weight: 700;
+        }
+        
+        /* Animación de pulso para el título */
+        @keyframes glow-pulse {
+            0%, 100% { filter: drop-shadow(0 0 10px var(--glow)); }
+            50% { filter: drop-shadow(0 0 25px var(--glow)); }
+        }
+        
+        h1 {
+            animation: glow-pulse 3s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container"></div>
+        
+        <div id="control-panel">
+            <h1>Polígonos 3D</h1>
+            <div class="control-group">
+                <label for="shape-select">Selecciona una Figura</label>
+                <select id="shape-select">
+                    <option value="tetrahedron">Tetraedro (4 caras)</option>
+                    <option value="cube">Cubo (6 caras)</option>
+                    <option value="octahedron">Octaedro (8 caras)</option>
+                    <option value="dodecahedron">Dodecaedro (12 caras)</option>
+                    <option value="icosahedron">Icosaedro (20 caras)</option>
+                    <option value="sphere">Esfera</option>
+                    <option value="cone">Cono</option>
+                    <option value="cylinder">Cilindro</option>
+                    <option value="torus">Toroide</option>
+                    <option value="torusknot">Nudo Toroidal</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="color-select">Color de la Figura</label>
+                <select id="color-select">
+                    <option value="0x00ffff" selected>Cyan Eléctrico</option>
+                    <option value="0xff00ff">Magenta Neón</option>
+                    <option value="0xffff00">Amarillo Radiante</option>
+                    <option value="0x00ff00">Verde Esmeralda</option>
+                    <option value="0xff0000">Rojo Carmesí</option>
+                    <option value="0x0000ff">Azul Cobalto</option>
+                    <option value="0xff6600">Naranja Fuego</option>
+                    <option value="0x9900ff">Púrpura Místico</option>
+                    <option value="0xff0099">Rosa Fucsia</option>
+                    <option value="0x00ffaa">Turquesa Océano</option>
+                    <option value="0xffaa00">Dorado Solar</option>
+                    <option value="0xffffff">Blanco Platino</option>
+                </select>
+            </div>
+            
+            <div class="control-group">
+                <label for="view-mode">Modo de Vista</label>
+                <select id="view-mode">
+                    <option value="3d-solid" selected>3D Sólido</option>
+                    <option value="3d-wireframe">3D Wireframe</option>
+                    <option value="2d-flat">2D Plano (Libro)</option>
+                </select>
+            </div>
+        </div>
+        
+        <div id="stats">
+            <h3>📊 Información</h3>
+            <div class="stat-item">
+                <span class="stat-label">Figura:</span>
+                <span class="stat-value" id="current-shape">Tetraedro</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Vértices:</span>
+                <span class="stat-value" id="vertices-count">4</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Caras:</span>
+                <span class="stat-value" id="faces-count">4</span>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Configuración de la escena
+        let scene, camera, renderer, currentMesh, controls;
+        let currentColor = 0x00ffff; // Color inicial
+        let viewMode = '3d-solid'; // Modo de vista inicial
+        
+        const shapeData = {
+            tetrahedron: { name: 'Tetraedro', vertices: 4, faces: 4 },
+            cube: { name: 'Cubo', vertices: 8, faces: 6 },
+            octahedron: { name: 'Octaedro', vertices: 6, faces: 8 },
+            dodecahedron: { name: 'Dodecaedro', vertices: 20, faces: 12 },
+            icosahedron: { name: 'Icosaedro', vertices: 12, faces: 20 },
+            sphere: { name: 'Esfera', vertices: 382, faces: 760 },
+            cone: { name: 'Cono', vertices: 34, faces: 64 },
+            cylinder: { name: 'Cilindro', vertices: 66, faces: 128 },
+            torus: { name: 'Toroide', vertices: 576, faces: 1152 },
+            torusknot: { name: 'Nudo Toroidal', vertices: 1122, faces: 2240 }
+        };
+        
+        function init() {
+            // Crear escena
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0f);
+            scene.fog = new THREE.Fog(0x0a0a0f, 10, 50);
+            
+            // Configurar cámara
+            camera = new THREE.PerspectiveCamera(
+                75,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                1000
+            );
+            camera.position.z = 5;
+            
+            // Configurar renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            // Controles de órbita personalizados
+            setupControls();
+            
+            // Iluminación
+            const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+            scene.add(ambientLight);
+            
+            const pointLight1 = new THREE.PointLight(0x00ffff, 2, 100);
+            pointLight1.position.set(5, 5, 5);
+            scene.add(pointLight1);
+            
+            const pointLight2 = new THREE.PointLight(0xff00ff, 1.5, 100);
+            pointLight2.position.set(-5, -5, 5);
+            scene.add(pointLight2);
+            
+            const pointLight3 = new THREE.PointLight(0xffff00, 1, 100);
+            pointLight3.position.set(0, 5, -5);
+            scene.add(pointLight3);
+            
+            // Crear figura inicial
+            createShape('tetrahedron');
+            
+            // Event listeners
+            document.getElementById('shape-select').addEventListener('change', (e) => {
+                createShape(e.target.value);
+            });
+            
+            document.getElementById('color-select').addEventListener('change', (e) => {
+                currentColor = parseInt(e.target.value);
+                updateColor();
+            });
+            
+            document.getElementById('view-mode').addEventListener('change', (e) => {
+                viewMode = e.target.value;
+                updateViewMode();
+            });
+            
+            window.addEventListener('resize', onWindowResize);
+            
+            // Iniciar animación
+            animate();
+        }
+        
+        function createShape(shapeType) {
+            // Remover figura anterior
+            if (currentMesh) {
+                scene.remove(currentMesh);
+                currentMesh.geometry.dispose();
+                currentMesh.material.dispose();
+            }
+            
+            let geometry;
+            
+            switch(shapeType) {
+                case 'tetrahedron':
+                    geometry = new THREE.TetrahedronGeometry(2);
+                    break;
+                case 'cube':
+                    geometry = new THREE.BoxGeometry(2, 2, 2);
+                    break;
+                case 'octahedron':
+                    geometry = new THREE.OctahedronGeometry(2);
+                    break;
+                case 'dodecahedron':
+                    geometry = new THREE.DodecahedronGeometry(2);
+                    break;
+                case 'icosahedron':
+                    geometry = new THREE.IcosahedronGeometry(2);
+                    break;
+                case 'sphere':
+                    geometry = new THREE.SphereGeometry(2, 32, 32);
+                    break;
+                case 'cone':
+                    geometry = new THREE.ConeGeometry(1.5, 3, 32);
+                    break;
+                case 'cylinder':
+                    geometry = new THREE.CylinderGeometry(1.5, 1.5, 3, 32);
+                    break;
+                case 'torus':
+                    geometry = new THREE.TorusGeometry(1.5, 0.6, 16, 100);
+                    break;
+                case 'torusknot':
+                    geometry = new THREE.TorusKnotGeometry(1.2, 0.4, 100, 16);
+                    break;
+            }
+            
+            // Material con efecto holográfico
+            const isWireframe = viewMode === '3d-wireframe' || viewMode === '2d-flat';
+            const material = new THREE.MeshPhongMaterial({
+                color: currentColor,
+                emissive: currentColor,
+                emissiveIntensity: 0.3,
+                shininess: 100,
+                specular: 0xff00ff,
+                wireframe: isWireframe,
+                transparent: true,
+                opacity: isWireframe ? 1 : 0.9
+            });
+            
+            currentMesh = new THREE.Mesh(geometry, material);
+            scene.add(currentMesh);
+            
+            // Agregar wireframe de bordes solo en modo 3D sólido
+            if (viewMode === '3d-solid') {
+                const wireframeGeometry = new THREE.EdgesGeometry(geometry);
+                const wireframeMaterial = new THREE.LineBasicMaterial({ 
+                    color: 0xff00ff,
+                    linewidth: 2
+                });
+                const wireframe = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
+                currentMesh.add(wireframe);
+            }
+            
+            // Actualizar stats
+            updateStats(shapeType);
+        }
+        
+        function updateStats(shapeType) {
+            const data = shapeData[shapeType];
+            document.getElementById('current-shape').textContent = data.name;
+            document.getElementById('vertices-count').textContent = data.vertices;
+            document.getElementById('faces-count').textContent = data.faces;
+        }
+        
+        function updateColor() {
+            if (currentMesh) {
+                currentMesh.material.color.setHex(currentColor);
+                currentMesh.material.emissive.setHex(currentColor);
+            }
+        }
+        
+        function updateViewMode() {
+            if (currentMesh) {
+                const isWireframe = viewMode === '3d-wireframe' || viewMode === '2d-flat';
+                
+                // Cambiar modo wireframe
+                currentMesh.material.wireframe = isWireframe;
+                currentMesh.material.opacity = isWireframe ? 1 : 0.9;
+                
+                // Remover wireframe de bordes existente
+                const existingWireframe = currentMesh.children.find(child => child instanceof THREE.LineSegments);
+                if (existingWireframe) {
+                    currentMesh.remove(existingWireframe);
+                    existingWireframe.geometry.dispose();
+                    existingWireframe.material.dispose();
+                }
+                
+                // Agregar wireframe de bordes solo en modo 3D sólido
+                if (viewMode === '3d-solid') {
+                    const wireframeGeometry = new THREE.EdgesGeometry(currentMesh.geometry);
+                    const wireframeMaterial = new THREE.LineBasicMaterial({ 
+                        color: 0xff00ff,
+                        linewidth: 2
+                    });
+                    const wireframe = new THREE.LineSegments(wireframeGeometry, wireframeMaterial);
+                    currentMesh.add(wireframe);
+                }
+                
+                // Configurar cámara según el modo
+                if (viewMode === '2d-flat') {
+                    // Vista ortográfica 2D (como en un libro)
+                    const aspect = window.innerWidth / window.innerHeight;
+                    const frustumSize = 5;
+                    
+                    // Cambiar a cámara ortográfica
+                    camera = new THREE.OrthographicCamera(
+                        frustumSize * aspect / -2,
+                        frustumSize * aspect / 2,
+                        frustumSize / 2,
+                        frustumSize / -2,
+                        0.1,
+                        1000
+                    );
+                    camera.position.set(0, 0, 10);
+                    camera.lookAt(0, 0, 0);
+                    
+                    // Rotar la figura para verla de frente
+                    currentMesh.rotation.set(0, 0, 0);
+                } else {
+                    // Vista 3D en perspectiva
+                    camera = new THREE.PerspectiveCamera(
+                        75,
+                        window.innerWidth / window.innerHeight,
+                        0.1,
+                        1000
+                    );
+                    camera.position.set(0, 0, 5);
+                    camera.lookAt(0, 0, 0);
+                }
+            }
+        }
+        
+        function setupControls() {
+            let isDragging = false;
+            let previousMousePosition = { x: 0, y: 0 };
+            let isRightClick = false;
+            
+            renderer.domElement.addEventListener('mousedown', (e) => {
+                isDragging = true;
+                isRightClick = e.button === 2;
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+            
+            renderer.domElement.addEventListener('mousemove', (e) => {
+                if (!isDragging) return;
+                
+                const deltaX = e.clientX - previousMousePosition.x;
+                const deltaY = e.clientY - previousMousePosition.y;
+                
+                if (isRightClick) {
+                    // Mover cámara
+                    camera.position.x -= deltaX * 0.01;
+                    camera.position.y += deltaY * 0.01;
+                } else if (viewMode !== '2d-flat') {
+                    // Rotar objeto solo en modos 3D
+                    if (currentMesh) {
+                        currentMesh.rotation.y += deltaX * 0.01;
+                        currentMesh.rotation.x += deltaY * 0.01;
+                    }
+                }
+                
+                previousMousePosition = { x: e.clientX, y: e.clientY };
+            });
+            
+            renderer.domElement.addEventListener('mouseup', () => {
+                isDragging = false;
+            });
+            
+            renderer.domElement.addEventListener('wheel', (e) => {
+                e.preventDefault();
+                camera.position.z += e.deltaY * 0.01;
+                camera.position.z = Math.max(2, Math.min(20, camera.position.z));
+            });
+            
+            renderer.domElement.addEventListener('dblclick', () => {
+                camera.position.set(0, 0, 5);
+                if (currentMesh) {
+                    currentMesh.rotation.set(0, 0, 0);
+                }
+            });
+            
+            renderer.domElement.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+            });
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Rotación automática suave solo en modos 3D
+            if (currentMesh && viewMode !== '2d-flat') {
+                currentMesh.rotation.y += 0.002;
+                currentMesh.rotation.x += 0.001;
+            }
+            
+            renderer.render(scene, camera);
+        }
+        
+        function onWindowResize() {
+            const aspect = window.innerWidth / window.innerHeight;
+            
+            if (camera instanceof THREE.PerspectiveCamera) {
+                camera.aspect = aspect;
+            } else if (camera instanceof THREE.OrthographicCamera) {
+                const frustumSize = 5;
+                camera.left = frustumSize * aspect / -2;
+                camera.right = frustumSize * aspect / 2;
+                camera.top = frustumSize / 2;
+                camera.bottom = frustumSize / -2;
+            }
+            
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Inicializar
+        init();
+    </script>
+</body>
+</html>
